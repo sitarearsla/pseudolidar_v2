@@ -9,46 +9,6 @@ import numpy as np
 import cv2
 import os
 
-class Object3d(object):
-    ''' 3d object label '''
-    def __init__(self, label_file_line):
-        data = label_file_line.split(' ')
-        data[1:] = [float(x) for x in data[1:]]
-
-        # extract label, truncation, occlusion
-        self.type = data[0] # 'Car', 'Pedestrian', ...
-        self.truncation = data[1] # truncated pixel ratio [0..1]
-        self.occlusion = int(data[2]) # 0=visible, 1=partly occluded, 2=fully occluded, 3=unknown
-        self.alpha = data[3] # object observation angle [-pi..pi]
-
-        # extract 2d bounding box in 0-based coordinates
-        self.xmin = data[4] # left
-        self.ymin = data[5] # top
-        self.xmax = data[6] # right
-        self.ymax = data[7] # bottom
-        self.box2d = np.array([self.xmin,self.ymin,self.xmax,self.ymax])
-
-        # extract 3d bounding box information
-        self.h = data[8] # box height
-        self.w = data[9] # box width
-        self.l = data[10] # box length (in meters)
-        self.t = (data[11],data[12],data[13]) # location (x,y,z) in camera coord.
-        self.ry = data[14] # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
-        if len(data) == 16:
-            self.score = data[15]
-            
-
-    def print_object(self):
-        print('Type, truncation, occlusion, alpha: %s, %d, %d, %f' % \
-            (self.type, self.truncation, self.occlusion, self.alpha))
-        print('2d bbox (x0,y0,x1,y1): %f, %f, %f, %f' % \
-            (self.xmin, self.ymin, self.xmax, self.ymax))
-        print('3d bbox h,w,l: %f, %f, %f' % \
-            (self.h, self.w, self.l))
-        print('3d bbox location, ry: (%f, %f, %f), %f' % \
-            (self.t[0],self.t[1],self.t[2],self.ry))
-
-
 class Calibration(object):
     ''' Calibration matrices and utils
         3d XYZ in <label>.txt are in rect camera coord.
@@ -81,25 +41,29 @@ class Calibration(object):
 
         TODO(rqi): do matrix multiplication only once for each projection.
     '''
-    def __init__(self, calib_filepath, from_video=False):
-        if from_video:
-            calibs = self.read_calib_from_video(calib_filepath)
-        else:
-            calibs = self.read_calib_file(calib_filepath)
+    def __init__(self, calib_filepath):
         # Projection matrix from rect camera coord to image2 coord
-        self.P = calibs['P2']
+        # change P2 to P_rect_02
+        cam2cam = self.read_calib_file(os.path.join(calib_filepath, 'calib_cam_to_cam.txt'))
+        self.P = cam2cam['P_rect_02']
         self.P = np.reshape(self.P, [3,4])
 
         # Rigid transform from Velodyne coord to reference camera coord
-        self.V2C = calibs['Tr_velo_to_cam']
-        self.V2C = np.reshape(self.V2C, [3,4])
+        velo2cam = self.read_calib_file(os.path.join(calib_filepath, 'calib_velo_to_cam.txt'))
+        Tr_velo_to_cam = np.zeros((3, 4))
+        Tr_velo_to_cam[0:3, 0:3] = np.reshape(velo2cam['R'], [3, 3])
+        Tr_velo_to_cam[:, 3] = velo2cam['T']
+        self.V2C = Tr_velo_to_cam
         self.C2V = inverse_rigid_trans(self.V2C)
+
         # Rotation from reference camera coord to rect camera coord
-        self.R0 = calibs['R0_rect']
+        # change R0_rect to R_rect_00
+        self.R0 = cam2cam['R_rect_00']
         self.R0 = np.reshape(self.R0,[3,3])
 
         # Camera intrinsics and extrinsics
-        self.P3 =np.reshape(calibs['P3'], [3,4])
+        # change P3 to P_rect_03
+        self.P3 = np.reshape(cam2cam['P_rect_03'], [3, 4])
         self.c_u = self.P[0,2]
         self.c_v = self.P[1,2]
         self.f_u = self.P[0,0]
@@ -125,21 +89,6 @@ class Calibration(object):
                 except ValueError:
                     pass
 
-        return data
-
-    def read_calib_from_video(self, calib_root_dir):
-        ''' Read calibration for camera 2 from video calib files.
-            there are calib_cam_to_cam and calib_velo_to_cam under the calib_root_dir
-        '''
-        data = {}
-        cam2cam = self.read_calib_file(os.path.join(calib_root_dir, 'calib_cam_to_cam.txt'))
-        velo2cam = self.read_calib_file(os.path.join(calib_root_dir, 'calib_velo_to_cam.txt'))
-        Tr_velo_to_cam = np.zeros((3,4))
-        Tr_velo_to_cam[0:3,0:3] = np.reshape(velo2cam['R'], [3,3])
-        Tr_velo_to_cam[:,3] = velo2cam['T']
-        data['Tr_velo_to_cam'] = np.reshape(Tr_velo_to_cam, [12])
-        data['R0_rect'] = cam2cam['R_rect_00']
-        data['P2'] = cam2cam['P_rect_02']
         return data
 
     def cart2hom(self, pts_3d):
@@ -265,11 +214,6 @@ def inverse_rigid_trans(Tr):
     inv_Tr[0:3,0:3] = np.transpose(Tr[0:3,0:3])
     inv_Tr[0:3,3] = np.dot(-np.transpose(Tr[0:3,0:3]), Tr[0:3,3])
     return inv_Tr
-
-def read_label(label_filename):
-    lines = [line.rstrip() for line in open(label_filename)]
-    objects = [Object3d(line) for line in lines]
-    return objects
 
 def load_image(img_filename):
     return cv2.imread(img_filename)
