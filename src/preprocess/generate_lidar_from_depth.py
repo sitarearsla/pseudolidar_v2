@@ -22,9 +22,9 @@ if __name__ == '__main__':
     parser.add_argument('--calib_dir', type=str,
                         default='~/Kitti/object/training/calib')
     parser.add_argument('--depth_dir', type=str,
-                        default='~/Kitti/object/training/predicted_disparity')
+                        default='/kuacc/users/sarslanturk16/Pseudo_Lidar_V2/depth_map/')
     parser.add_argument('--save_dir', type=str,
-                        default='~/Kitti/object/training/predicted_velodyne')
+                        default='/kuacc/users/sarslanturk16/Pseudo_Lidar_V2')
     parser.add_argument('--max_high', type=int, default=1)
     args = parser.parse_args()
 

@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kitti_util
 import numpy as np
 import scipy.misc as ssc
+import cv2
 
 
 def generate_dispariy_from_velo(pc_velo, height, width, calib):
@@ -33,7 +34,7 @@ if __name__ == '__main__':
     lidar_dir = args.data_path + '/velodyne/'
     calib_dir = args.data_path + '/calib/'
     image_dir = args.data_path + '/image_2/'
-    depth_dir = args.data_path + '/depth_map/'
+    depth_dir ='/kuacc/users/sarslanturk16/Pseudo_Lidar_V2/depth_map/'
 
     assert os.path.isdir(lidar_dir)
     assert os.path.isdir(calib_dir)
@@ -58,7 +59,7 @@ if __name__ == '__main__':
         # load point cloud
         lidar = np.fromfile(lidar_dir + '/' + fn, dtype=np.float32).reshape((-1, 4))[:, :3]
         image_file = '{}/{}.png'.format(image_dir, predix)
-        image = ssc.imread(image_file)
+        image = cv2.imread(image_file)
         height, width = image.shape[:2]
         depth_map = generate_dispariy_from_velo(lidar, height, width, calib)
         np.save(depth_dir + '/' + predix, depth_map)
